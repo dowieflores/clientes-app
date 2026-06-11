@@ -180,6 +180,12 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
   async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
   try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}}catch(e){}
   document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)setTimeout(()=>i.focus(),100);});
+  
+  window.logout = function() {
+    if (!confirm('¿Cerrar sesión?')) return;
+    localStorage.removeItem('clientes_auth');
+    location.reload();
+  };
   window.checkPwd=async function(){
     const val=document.getElementById('pwd-input').value;
     const h=await sha256(val);
@@ -205,6 +211,7 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
       <button class="btn btn-ghost" onclick="openSetup()">⚙️ <span>Configurar</span></button>
       <button class="btn btn-ghost" id="btn-sync" onclick="syncFromSheets()" style="display:none">🔄 <span>Sync</span></button>
       <button class="btn btn-primary" onclick="openNew()">＋ <span>Nuevo</span></button>
+      <button class="btn btn-ghost" onclick="logout()" title="Cerrar sesión" style="opacity:.7;font-size:16px;padding:6px 10px">🔓</button>
     </div>
   </div>
   <div class="hcounts" id="header-count">Cargando…</div>
