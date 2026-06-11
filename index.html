@@ -182,11 +182,10 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
   document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)setTimeout(()=>i.focus(),100);});
   
   window.logout = function() {
-    if (!confirm('¿Cerrar sesión?')) return;
     localStorage.removeItem('clientes_auth');
     const ov = document.getElementById('pwd-overlay');
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;');
     const inp = document.getElementById('pwd-input');
-    ov.style.display = 'flex';
     inp.value = '';
     document.getElementById('pwd-error').textContent = '';
     setTimeout(() => inp.focus(), 100);
