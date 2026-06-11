@@ -163,6 +163,39 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
 </style>
 </head>
 <body>
+<div id="pwd-overlay" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="background:#fff;border-radius:16px;padding:40px 36px;width:320px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center;">
+    <div style="font-size:40px;margin-bottom:12px">🔒</div>
+    <div style="font-size:20px;font-weight:700;color:#1a2a4a;margin-bottom:6px">Clientes App</div>
+    <div style="font-size:13px;color:#888;margin-bottom:28px">Introduce la contraseña para continuar</div>
+    <input id="pwd-input" type="password" placeholder="Contraseña" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;outline:none;margin-bottom:8px;" onkeydown="if(event.key==='Enter')checkPwd()">
+    <div id="pwd-error" style="color:#e53e3e;font-size:12px;min-height:18px;margin-bottom:8px"></div>
+    <button onclick="checkPwd()" style="width:100%;padding:12px;background:#1a2a4a;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">Entrar</button>
+    <div style="margin-top:16px;font-size:11px;color:#ccc"><label style="cursor:pointer"><input type="checkbox" id="pwd-remember" checked style="margin-right:4px">Recordar en este dispositivo 7 días</label></div>
+  </div>
+</div>
+<script>
+(function(){
+  const HASH='1000bb31f2498874b97f2f381b4cfb07a1f0218700a866598ac19f10a554d6e6',KEY='clientes_auth',DAYS=7;
+  async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+  try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}}catch(e){}
+  document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)i.focus();});
+  window.checkPwd=async function(){
+    const val=document.getElementById('pwd-input').value;
+    const h=await sha256(val);
+    if(h===HASH){
+      if(document.getElementById('pwd-remember').checked){localStorage.setItem(KEY,JSON.stringify({hash:HASH,exp:Date.now()+DAYS*86400000}));}
+      document.getElementById('pwd-overlay').style.display='none';
+    }else{
+      document.getElementById('pwd-error').textContent='Contraseña incorrecta';
+      document.getElementById('pwd-input').value='';
+      document.getElementById('pwd-input').focus();
+      setTimeout(()=>document.getElementById('pwd-error').textContent='',2000);
+    }
+  };
+})();
+</script>
+
 
 <!-- HEADER -->
 <header>
@@ -541,54 +574,38 @@ const PAGE = 60;
 // DYNAMIC FILTERS
 // ════════════════════════════════════════════
 function rebuildFilters() {
-  // Derive unique sorted values from current DB
-  const get = (field, sort) => {
-    const vals = [...new Set(DB.map(r => r[field]).filter(Boolean))];
-    return sort ? vals.sort((a,b) => a.localeCompare(b, 'es', {sensitivity:'base'})) : vals;
-  };
-
-  // ESTADO: merge seed list with any new values in DB
+  const get = (field) => [...new Set(DB.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   const estadoSeed = ["CLIENTE","VISITADO","AINHOA","PENDIENTE","NO INTERESA","Clientes 2"];
-  const estadosDB  = get('ESTADO');
+  const estadosDB  = [...new Set(DB.map(r=>r.ESTADO).filter(Boolean))];
   const estadoAll  = [...new Set([...estadoSeed, ...estadosDB])];
-
-  PROVS_LIST = get('PROVINCIA', true);
-  TIPOS_LIST = get('TIPO', true);
-  HOJAS_LIST = get('HOJA_ORIGEN', true);
-
-  // Rebuild each filter panel
+  PROVS_LIST = get('PROVINCIA');
+  TIPOS_LIST = get('TIPO');
+  HOJAS_LIST = get('HOJA_ORIGEN');
   rebuildPanel('chips-estado',    estadoAll,  'estado');
   rebuildPanel('chips-provincia', PROVS_LIST, 'provincia');
   rebuildPanel('chips-tipo',      TIPOS_LIST, 'tipo');
   rebuildPanel('chips-hoja',      HOJAS_LIST, 'hoja');
-
-  // Rebuild datalists for edit form autocomplete
-  ['dl-provincias','dl-tipos','dl-hojas'].forEach(id => {
-    const dl = document.getElementById(id);
-    if (dl) dl.innerHTML = '';
-  });
+  ['dl-provincias','dl-tipos','dl-hojas'].forEach(id=>{const dl=document.getElementById(id);if(dl)dl.innerHTML='';});
   populateDatalist('dl-provincias', PROVS_LIST);
   populateDatalist('dl-tipos',      TIPOS_LIST);
   populateDatalist('dl-hojas',      HOJAS_LIST);
 }
-
 function rebuildPanel(cid, vals, key) {
   const wrap = document.getElementById(cid);
   if (!wrap) return;
-  // Preserve currently selected values
   const selected = new Set(sel[key]);
   wrap.innerHTML = '';
   vals.forEach(v => {
     if (!v) return;
     const c = document.createElement('button');
-    c.className = 'fchip'; c.dataset.val = v; c.textContent = v;
+    c.className='fchip'; c.dataset.val=v; c.textContent=v;
     if (selected.has(v)) c.classList.add('sel');
-    c.addEventListener('click', () => {
-      if (sel[key].has(v)) { sel[key].delete(v); c.classList.remove('sel'); }
-      else                 { sel[key].add(v);    c.classList.add('sel'); }
-      const badge = document.getElementById('b-' + key);
-      badge.textContent = sel[key].size || '';
-      badge.className   = 'badge' + (sel[key].size ? ' active' : '');
+    c.addEventListener('click', ()=>{
+      if (sel[key].has(v)){sel[key].delete(v);c.classList.remove('sel');}
+      else               {sel[key].add(v);   c.classList.add('sel');}
+      const badge=document.getElementById('b-'+key);
+      badge.textContent=sel[key].size||'';
+      badge.className='badge'+(sel[key].size?' active':'');
       applyFilters();
     });
     wrap.appendChild(c);
