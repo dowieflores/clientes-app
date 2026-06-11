@@ -184,7 +184,12 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
   window.logout = function() {
     if (!confirm('¿Cerrar sesión?')) return;
     localStorage.removeItem('clientes_auth');
-    location.reload();
+    const ov = document.getElementById('pwd-overlay');
+    const inp = document.getElementById('pwd-input');
+    ov.style.display = 'flex';
+    inp.value = '';
+    document.getElementById('pwd-error').textContent = '';
+    setTimeout(() => inp.focus(), 100);
   };
   window.checkPwd=async function(){
     const val=document.getElementById('pwd-input').value;
