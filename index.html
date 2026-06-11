@@ -179,7 +179,7 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
   const HASH='1000bb31f2498874b97f2f381b4cfb07a1f0218700a866598ac19f10a554d6e6',KEY='clientes_auth',DAYS=7;
   async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
   try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}}catch(e){}
-  document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)i.focus();});
+  document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)setTimeout(()=>i.focus(),100);});
   window.checkPwd=async function(){
     const val=document.getElementById('pwd-input').value;
     const h=await sha256(val);
@@ -216,7 +216,7 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
 <div class="search-wrap">
   <div class="search-wrapper">
     <span class="sicon">🔍</span>
-    <input class="search-input" id="search" type="search" placeholder="Buscar empresa, contacto, localidad…" autocomplete="off" spellcheck="false">
+    <input class="search-input" id="search" type="search" placeholder="Buscar… varios términos separados por coma" autocomplete="off" spellcheck="false">
   </div>
 </div>
 
@@ -574,10 +574,9 @@ const PAGE = 60;
 // DYNAMIC FILTERS
 // ════════════════════════════════════════════
 function rebuildFilters() {
-  const get = (field) => [...new Set(DB.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  const get = f => [...new Set(DB.map(r=>r[f]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   const estadoSeed = ["CLIENTE","VISITADO","AINHOA","PENDIENTE","NO INTERESA","Clientes 2"];
-  const estadosDB  = [...new Set(DB.map(r=>r.ESTADO).filter(Boolean))];
-  const estadoAll  = [...new Set([...estadoSeed, ...estadosDB])];
+  const estadoAll  = [...new Set([...estadoSeed, ...DB.map(r=>r.ESTADO).filter(Boolean)])];
   PROVS_LIST = get('PROVINCIA');
   TIPOS_LIST = get('TIPO');
   HOJAS_LIST = get('HOJA_ORIGEN');
@@ -604,8 +603,7 @@ function rebuildPanel(cid, vals, key) {
       if (sel[key].has(v)){sel[key].delete(v);c.classList.remove('sel');}
       else               {sel[key].add(v);   c.classList.add('sel');}
       const badge=document.getElementById('b-'+key);
-      badge.textContent=sel[key].size||'';
-      badge.className='badge'+(sel[key].size?' active':'');
+      badge.textContent=sel[key].size||''; badge.className='badge'+(sel[key].size?' active':'');
       applyFilters();
     });
     wrap.appendChild(c);
@@ -660,16 +658,19 @@ function populateDatalist(id, vals) {
 }
 
 function applyFilters() {
-  const q = document.getElementById('search').value.trim().toLowerCase();
+  const raw = document.getElementById('search').value.trim().toLowerCase();
+  // Split by comma — multi-term OR search
+  const terms = raw ? raw.split(',').map(t=>t.trim()).filter(Boolean) : [];
   filtered = DB.filter(r => {
     if (sel.estado.size    && !sel.estado.has(r.ESTADO))       return false;
     if (sel.provincia.size && !sel.provincia.has(r.PROVINCIA)) return false;
     if (sel.tipo.size      && !sel.tipo.has(r.TIPO))           return false;
     if (sel.hoja.size      && !sel.hoja.has(r.HOJA_ORIGEN))    return false;
-    if (q) {
+    if (terms.length) {
       const hay = [r.EMPRESA,r.CONTACTO,r.LOCALIDAD,r.TELÉFONO,
                    r.EMAIL,r.COMENTARIOS,r.DIRECCIÓN,r.TIPO].join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
+      // At least one term must match (OR logic)
+      if (!terms.some(t => hay.includes(t))) return false;
     }
     return true;
   });
