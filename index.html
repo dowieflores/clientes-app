@@ -178,18 +178,10 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
 (function(){
   const HASH='1000bb31f2498874b97f2f381b4cfb07a1f0218700a866598ac19f10a554d6e6',KEY='clientes_auth',DAYS=7;
   async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+  window.logout=function(){localStorage.removeItem(KEY);const ov=document.getElementById('pwd-overlay');ov.setAttribute('style','position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;');const inp=document.getElementById('pwd-input');inp.value='';document.getElementById('pwd-error').textContent='';setTimeout(()=>inp.focus(),100);};
   try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}}catch(e){}
   document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)setTimeout(()=>i.focus(),100);});
   
-  window.logout = function() {
-    localStorage.removeItem('clientes_auth');
-    const ov = document.getElementById('pwd-overlay');
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;');
-    const inp = document.getElementById('pwd-input');
-    inp.value = '';
-    document.getElementById('pwd-error').textContent = '';
-    setTimeout(() => inp.focus(), 100);
-  };
   window.checkPwd=async function(){
     const val=document.getElementById('pwd-input').value;
     const h=await sha256(val);
@@ -210,7 +202,7 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
 <!-- HEADER -->
 <header>
   <div class="hrow">
-    <h1>📋 Listado Clientes</h1>
+    <h1>📋 Listado Clientes <span style="font-size:11px;font-weight:400;opacity:.5;vertical-align:middle;letter-spacing:.5px">v1.2</span></h1>
     <div class="hbtns">
       <button class="btn btn-ghost" onclick="openSetup()">⚙️ <span>Configurar</span></button>
       <button class="btn btn-ghost" id="btn-sync" onclick="syncFromSheets()" style="display:none">🔄 <span>Sync</span></button>
