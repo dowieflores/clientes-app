@@ -174,25 +174,150 @@ label.flabel{font-size:10px;font-weight:600;text-transform:uppercase;letter-spac
     <div style="margin-top:16px;font-size:11px;color:#ccc"><label style="cursor:pointer"><input type="checkbox" id="pwd-remember" checked style="margin-right:4px">Recordar en este dispositivo 7 días</label></div>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <script>
 (function(){
   const HASH='1000bb31f2498874b97f2f381b4cfb07a1f0218700a866598ac19f10a554d6e6',KEY='clientes_auth',DAYS=7;
+  const LOCK_KEY='clientes_lock', MAX_ATTEMPTS=5, LOCK_MIN=10;
+  const EMAILJS_SVC='service_zawwt74', EMAILJS_TPL='template_piwydgb', EMAILJS_PUB='0i0ufNBeJmmoW4fEN';
+  let countdownTimer = null;
+
   async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-  window.logout=function(){localStorage.removeItem(KEY);const ov=document.getElementById('pwd-overlay');ov.setAttribute('style','position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;');const inp=document.getElementById('pwd-input');inp.value='';document.getElementById('pwd-error').textContent='';setTimeout(()=>inp.focus(),100);};
-  try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}}catch(e){}
-  document.addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('pwd-input');if(i)setTimeout(()=>i.focus(),100);});
-  
+
+  // ── Get IP info ──
+  async function getIPInfo(){
+    try{
+      const r=await fetch('https://ipapi.co/json/');
+      return await r.json();
+    }catch(e){return {ip:'desconocida',country_name:'desconocido',city:'desconocida'};}
+  }
+
+  // ── Check IP blacklist in Sheets ──
+  async function isIPBlocked(ip){
+    try{
+      const cfg=JSON.parse(localStorage.getItem('clientes_cfg')||'{}');
+      if(!cfg.clientId||!cfg.sheetId) return false;
+      // We check after auth, so use stored token if available
+      const auth=JSON.parse(localStorage.getItem(KEY)||'null');
+      if(!auth) return false;
+      // Simple check: blocked IPs stored in localStorage by admin
+      const blocked=JSON.parse(localStorage.getItem('clientes_blocked_ips')||'[]');
+      return blocked.includes(ip);
+    }catch(e){return false;}
+  }
+
+  // ── Send lockout email ──
+  async function sendLockoutEmail(ipInfo, attempts){
+    try{
+      emailjs.init(EMAILJS_PUB);
+      await emailjs.send(EMAILJS_SVC, EMAILJS_TPL, {
+        ip: ipInfo.ip||'desconocida',
+        country: ipInfo.country_name||'desconocido',
+        city: ipInfo.city||'desconocida',
+        time: new Date().toLocaleString('es-ES'),
+        attempts: attempts + ' intentos fallidos'
+      });
+    }catch(e){console.warn('Email no enviado:',e);}
+  }
+
+  // ── Lockout UI ──
+  function showLockout(remaining){
+    const err=document.getElementById('pwd-error');
+    const inp=document.getElementById('pwd-input');
+    const btn=document.querySelector('#pwd-overlay button[onclick="checkPwd()"]');
+    if(inp) inp.disabled=true;
+    if(btn) btn.disabled=true;
+    if(countdownTimer) clearInterval(countdownTimer);
+    countdownTimer=setInterval(()=>{
+      const left=Math.ceil((remaining-Date.now())/1000);
+      if(left<=0){
+        clearInterval(countdownTimer);
+        if(inp){inp.disabled=false;inp.value='';inp.focus();}
+        if(btn) btn.disabled=false;
+        if(err) err.textContent='';
+        localStorage.removeItem(LOCK_KEY);
+      }else{
+        const m=Math.floor(left/60), s=left%60;
+        if(err) err.textContent=`🔒 Bloqueado ${m}:${s.toString().padStart(2,'0')} min`;
+      }
+    },500);
+  }
+
+  // ── Check lock state on load ──
+  function checkLock(){
+    try{
+      const lock=JSON.parse(localStorage.getItem(LOCK_KEY)||'null');
+      if(lock&&lock.until>Date.now()){showLockout(lock.until);return true;}
+    }catch(e){}
+    return false;
+  }
+
+  // ── Logout ──
+  window.logout=function(){
+    localStorage.removeItem(KEY);
+    const ov=document.getElementById('pwd-overlay');
+    ov.setAttribute('style','position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a2a4a 0%,#0d1b30 100%);display:flex;align-items:center;justify-content:center;');
+    const inp=document.getElementById('pwd-input');
+    if(inp){inp.disabled=false;inp.value='';}
+    const btn=document.querySelector('#pwd-overlay button[onclick="checkPwd()"]');
+    if(btn) btn.disabled=false;
+    document.getElementById('pwd-error').textContent='';
+    checkLock();
+    setTimeout(()=>{if(inp&&!inp.disabled)inp.focus();},100);
+  };
+
+  // ── Session check ──
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(s&&s.hash===HASH&&s.exp>Date.now()){document.getElementById('pwd-overlay').style.display='none';return;}
+  }catch(e){}
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    checkLock();
+    const i=document.getElementById('pwd-input');
+    if(i&&!i.disabled) setTimeout(()=>i.focus(),100);
+  });
+
+  // ── Check password ──
   window.checkPwd=async function(){
-    const val=document.getElementById('pwd-input').value;
+    const inp=document.getElementById('pwd-input');
+    if(inp.disabled) return;
+
+    // Check lock
+    try{
+      const lock=JSON.parse(localStorage.getItem(LOCK_KEY)||'null');
+      if(lock&&lock.until>Date.now()){showLockout(lock.until);return;}
+    }catch(e){}
+
+    const val=inp.value;
     const h=await sha256(val);
     if(h===HASH){
-      if(document.getElementById('pwd-remember').checked){localStorage.setItem(KEY,JSON.stringify({hash:HASH,exp:Date.now()+DAYS*86400000}));}
+      localStorage.removeItem(LOCK_KEY);
+      if(document.getElementById('pwd-remember').checked){
+        localStorage.setItem(KEY,JSON.stringify({hash:HASH,exp:Date.now()+DAYS*86400000}));
+      }
       document.getElementById('pwd-overlay').style.display='none';
     }else{
-      document.getElementById('pwd-error').textContent='Contraseña incorrecta';
-      document.getElementById('pwd-input').value='';
-      document.getElementById('pwd-input').focus();
-      setTimeout(()=>document.getElementById('pwd-error').textContent='',2000);
+      // Increment attempts
+      let attempts=1;
+      try{
+        const prev=JSON.parse(localStorage.getItem(LOCK_KEY)||'null');
+        if(prev&&!prev.until) attempts=prev.attempts+1;
+      }catch(e){}
+
+      if(attempts>=MAX_ATTEMPTS){
+        const until=Date.now()+LOCK_MIN*60*1000;
+        localStorage.setItem(LOCK_KEY,JSON.stringify({until,attempts}));
+        // Get IP and send email
+        getIPInfo().then(info=>sendLockoutEmail(info, attempts));
+        showLockout(until);
+      }else{
+        localStorage.setItem(LOCK_KEY,JSON.stringify({attempts}));
+        document.getElementById('pwd-error').textContent=`Contraseña incorrecta (${attempts}/${MAX_ATTEMPTS})`;
+        inp.value='';
+        inp.focus();
+        setTimeout(()=>document.getElementById('pwd-error').textContent='',2500);
+      }
     }
   };
 })();
